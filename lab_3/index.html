@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Лаб 3: Растровые алгоритмы</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f7; color: #1a1a1a; padding: 20px; }
+h1 { text-align: center; margin-bottom: 20px; }
+.app { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+@media (max-width: 1000px) { .app { grid-template-columns: 1fr; } }
+.panel { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.panel h2 { margin-bottom: 16px; font-size: 18px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.row label { width: 110px; font-size: 13px; font-weight: 600; }
+.row input { flex: 1; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+.row select { flex: 1; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+.btn { width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 6px; background: #3b82f6; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn:hover { background: #2563eb; }
+.btn.secondary { background: #6b7280; width: auto; padding: 6px 12px; margin-right: 6px; }
+.btn.secondary:hover { background: #4b5563; }
+.btn.danger { background: #ef4444; width: auto; padding: 6px 12px; }
+.btn.danger:hover { background: #dc2626; }
+.viewport { background: #fff; border: 2px solid #e5e7eb; border-radius: 8px; position: relative; overflow: hidden; }
+canvas { display: block; background: #fff; }
+.timing { font-size: 13px; font-family: monospace; margin-top: 10px; color: #166534; }
+.trace { font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; margin-top: 10px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #1a1a1a; }
+.trace div { margin-bottom: 2px; }
+.trace .step { color: #2563eb; font-weight: 600; }
+.trace .coord { color: #166534; }
+.legend { display: flex; gap: 12px; margin-top: 10px; font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend .dot { width: 10px; height: 10px; border-radius: 2px; }
+.note { font-size: 12px; color: #6b7280; margin-top: 10px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>Базовые растровые алгоритмы</h1>
+<div class="app">
+<div class="panel">
+<h2>Параметры</h2>
+<div class="row">
+<label>Алгоритм</label>
+<select id="algo">
+<option value="step">Пошаговый</option>
+<option value="dda">ЦДА</option>
+<option value="bresenham">Брезенхем (отрезок)</option>
+<option value="circle">Брезенхем (окружность)</option>
+</select>
+</div>
+<div class="row">
+<label>X0</label><input type="number" id="x0" value="50">
+</div>
+<div class="row">
+<label>Y0</label><input type="number" id="y0" value="50">
+</div>
+<div class="row">
+<label>X1</label><input type="number" id="x1" value="250">
+</div>
+<div class="row">
+<label>Y1</label><input type="number" id="y1" value="180">
+</div>
+<div class="row">
+<label>Радиус R</label><input type="number" id="radius" value="80">
+</div>
+<div class="row">
+<label>Масштаб</label><input type="number" id="scale" min="1" max="10" value="4">
+</div>
+<div class="row">
+<button class="btn" id="btnDraw">Нарисовать</button>
+<button class="btn secondary" id="btnClear">Очистить</button>
+<button class="btn danger" id="btnExample">Пример расчета</button>
+</div>
+<div class="timing" id="timing"></div>
+<div class="trace" id="trace"></div>
+<div class="note">Координаты привязаны к целочисленной дискретной сетке пикселей canvas.</div>
+</div>
+<div class="panel viewport" id="viewport">
+<canvas id="canvas" width="800" height="600"></canvas>
+</div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let scale = 4;
+let ox = 0, oy = 0;
+
+function cx(x) { return Math.round(ox + x * scale); }
+function cy(y) { return Math.round(oy - y * scale); }
+
+function drawGrid() {
+ctx.strokeStyle = '#e5e7eb';
+ctx.lineWidth = 1;
+for (let i = -100; i <= 100; i += 10) {
+ctx.beginPath();
+ctx.moveTo(cx(i), cy(-100));
+ctx.lineTo(cx(i), cy(100));
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx(-100), cy(i));
+ctx.lineTo(cx(100), cy(i));
+ctx.stroke();
+}
+ctx.strokeStyle = '#9ca3af';
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(cx(-100), cy(0));
+ctx.lineTo(cx(100), cy(0));
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx(0), cy(-100));
+ctx.lineTo(cx(0), cy(100));
+ctx.stroke();
+ctx.fillStyle = '#1a1a1a';
+ctx.font = '12px sans-serif';
+for (let i = -100; i <= 100; i += 20) {
+if (i !== 0) {
+ctx.fillText(i, cx(i) + 2, cy(0) + 14);
+ctx.fillText(i, cx(0) + 4, cy(i) - 4);
+}
+}
+ctx.fillText('X', cx(95), cy(-5));
+ctx.fillText('Y', cx(5), cy(95));
+}
+
+function plot(x, y, color) {
+ctx.fillStyle = color || '#000000';
+ctx.fillRect(cx(x) - 1, cy(y) - 1, 2, 2);
+}
+
+function clearCanvas() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+drawGrid();
+}
+function bresenhamLine(x0, y0, x1, y1, color, trace) {
+let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+let err = dx - dy;
+let steps = 0;
+while (true) {
+plot(x0, y0, color);
+steps++;
+if (trace) trace.push('Шаг ' + steps + ': (' + x0 + ',' + y0 + ')');
+if (x0 === x1 && y0 === y1) break;
+let e2 = 2 * err;
+if (e2 > -dy) { err -= dy; x0 += sx; }
+if (e2 < dx) { err += dx; y0 += sy; }
+}
+return steps;
+}
+
+function stepByStep(x0, y0, x1, y1, color, trace) {
+let dx = x1 - x0, dy = y1 - y0;
+let steps = Math.max(Math.abs(dx), Math.abs(dy));
+let xInc = dx / steps, yInc = dy / steps;
+let x = x0, y = y0;
+for (let i = 0; i <= steps; i++) {
+plot(Math.round(x), Math.round(y), color);
+if (trace) trace.push('Шаг ' + i + ': (' + Math.round(x) + ',' + Math.round(y) + ')');
+x += xInc;
+y += yInc;
+}
+return steps + 1;
+}
+
+function dda(x0, y0, x1, y1, color, trace) {
+let dx = x1 - x0, dy = y1 - y0;
+let steps = Math.max(Math.abs(dx), Math.abs(dy));
+let xInc = dx / steps, yInc = dy / steps;
+let x = x0, y = y0;
+for (let i = 0; i <= steps; i++) {
+plot(Math.round(x), Math.round(y), color);
+if (trace) trace.push('Шаг ' + i + ': (' + Math.round(x) + ',' + Math.round(y) + ')');
+x += xInc;
+y += yInc;
+}
+return steps + 1;
+}
+
+function bresenhamCircle(xc, yc, r, color, trace) {
+let x = 0, y = r, d = 3 - 2 * r;
+let steps = 0;
+function plot8(xc, yc, x, y) {
+plot(xc + x, yc + y, color);
+plot(xc - x, yc + y, color);
+plot(xc + x, yc - y, color);
+plot(xc - x, yc - y, color);
+plot(xc + y, yc + x, color);
+plot(xc - y, yc + x, color);
+plot(xc + y, yc - x, color);
+plot(xc - y, yc - x, color);
+}
+plot8(xc, yc, x, y);
+steps++;
+if (trace) trace.push('Шаг ' + steps + ': x=' + x + ' y=' + y + ' d=' + d);
+while (y >= x) {
+x++;
+if (d > 0) { y--; d = d + 4 * (x - y) + 10; }
+else { d = d + 4 * x + 6; }
+plot8(xc, yc, x, y);
+steps++;
+if (trace) trace.push('Шаг ' + steps + ': x=' + x + ' y=' + y + ' d=' + d);
+}
+return steps;
+}
+function run() {
+clearCanvas();
+let x0 = parseInt(document.getElementById('x0').value);
+let y0 = parseInt(document.getElementById('y0').value);
+let x1 = parseInt(document.getElementById('x1').value);
+let y1 = parseInt(document.getElementById('y1').value);
+let r = parseInt(document.getElementById('radius').value);
+scale = parseInt(document.getElementById('scale').value);
+ox = canvas.width / 2;
+oy = canvas.height / 2;
+let algo = document.getElementById('algo').value;
+let trace = [];
+let t0 = performance.now();
+if (algo === 'step') stepByStep(x0, y0, x1, y1, '#000000', trace);
+else if (algo === 'dda') dda(x0, y0, x1, y1, '#000000', trace);
+else if (algo === 'bresenham') bresenhamLine(x0, y0, x1, y1, '#000000', trace);
+else if (algo === 'circle') bresenhamCircle(x0, y0, r, '#000000', trace);
+let t1 = performance.now();
+document.getElementById('timing').textContent = 'Шагов: ' + trace.length + '  Время: ' + (t1 - t0).toFixed(3) + ' мс';
+document.getElementById('trace').innerHTML = trace.map(t => '<div>' + t + '</div>').join('');
+}
+
+function showExample() {
+clearCanvas();
+let x0 = 10, y0 = 10, x1 = 50, y1 = 30;
+scale = 8;
+ox = canvas.width / 2;
+oy = canvas.height / 2;
+let trace = [];
+let t0 = performance.now();
+bresenhamLine(x0, y0, x1, y1, '#ef4444', trace);
+let t1 = performance.now();
+document.getElementById('algo').value = 'bresenham';
+document.getElementById('x0').value = x0;
+document.getElementById('y0').value = y0;
+document.getElementById('x1').value = x1;
+document.getElementById('y1').value = y1;
+document.getElementById('timing').textContent = 'Пример Брезенхема: (' + x0 + ',' + y0 + ')->(' + x1 + ',' + y1 + ')\nШагов: ' + trace.length + '  Время: ' + (t1 - t0).toFixed(3) + ' мс';
+let dx = x1 - x0, dy = y1 - y0;
+let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+let err = dx - dy;
+let html = '<div class="step">dx=' + dx + ' dy=' + dy + ' sx=' + sx + ' sy=' + sy + ' err0=' + err + '</div>';
+let cx0 = x0, cy0 = y0, err2 = err;
+let i = 0;
+while (true) {
+html += '<div>Шаг ' + i + ': plot(' + cx0 + ',' + cy0 + ') err=' + err2 + '</div>';
+if (cx0 === x1 && cy0 === y1) break;
+let e2 = 2 * err2;
+if (e2 > -dy) { err2 -= dy; cx0 += sx; }
+if (e2 < dx) { err2 += dx; cy0 += sy; }
+i++;
+}
+document.getElementById('trace').innerHTML = html;
+}
+
+document.getElementById('btnDraw').addEventListener('click', run);
+document.getElementById('btnClear').addEventListener('click', clearCanvas);
+document.getElementById('btnExample').addEventListener('click', showExample);
+run();
+</script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Лаб 2: Локальная пороговая обработка</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f7; color: #333; padding: 20px; }
+h1 { text-align: center; margin-bottom: 24px; color: #1a1a1a; }
+.app { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+@media (max-width: 1000px) { .app { grid-template-columns: 1fr; } }
+.panel { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.panel h2 { margin-bottom: 16px; font-size: 18px; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+.viewer { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px; }
+.view { flex: 1; display: flex; flex-direction: column; align-items: center; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-height: 320px; }
+.view canvas { max-width: 100%; height: auto; background: #fff; border: 1px solid #eee; }
+.view label { margin-top: 10px; font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.row label { width: 150px; font-size: 14px; font-weight: 600; }
+.row input[type="number"] { width: 80px; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+.row input[type="range"] { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; outline: none; accent-color: #3b82f6; }
+.btn { width: 100%; padding: 10px 14px; margin-bottom: 8px; border: none; border-radius: 6px; background: #3b82f6; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn:hover { background: #2563eb; }
+.btn.secondary { background: #6b7280; }
+.btn.secondary:hover { background: #4b5563; }
+.btn.small { width: auto; padding: 6px 12px; font-size: 13px; margin-right: 6px; }
+.file-input { width: 100%; padding: 8px; border: 1px dashed #d1d5db; border-radius: 6px; background: #fff; font-size: 13px; margin-bottom: 12px; }
+.samples { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.samples button { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; font-size: 12px; cursor: pointer; }
+.samples button:hover { background: #eff6ff; border-color: #3b82f6; }
+.note { font-size: 13px; color: #6b7280; line-height: 1.5; margin-top: 12px; }
+.compare { display: flex; gap: 10px; margin-top: 10px; }
+.stats { font-size: 13px; color: #166534; margin-top: 8px; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>Лабораторная работа 2: Локальная пороговая обработка</h1>
+<div class="app">
+<div class="panel">
+<h2>Источник изображения</h2>
+<input type="file" id="fileInput" accept="image/*">
+<div class="samples">
+<button id="sample1">Градиент + шум</button>
+<button id="sample2">Низкий контраст</button>
+<button id="sample3">Размытый текст</button>
+<button id="sample4">Фон с пятнами</button>
+</div>
+<div class="note">Загрузите своё изображение или выберите тестовое из подборки.</div>
+
+<h2>Параметры</h2>
+<div class="row">
+<label>Радиус окна (px)</label>
+<input type="number" id="radius" min="1" max="50" value="15">
+</div>
+<div class="row">
+<label>Константа C (метод 1)</label>
+<input type="number" id="constC" min="-100" max="100" value="10">
+</div>
+<div class="row">
+<label>Коэффициент k (метод 2)</label>
+<input type="number" id="coefK" min="-5" max="5" step="0.1" value="-1.0">
+</div>
+<div class="compare">
+<button class="btn small" id="btnM1">Метод 1</button>
+<button class="btn small" id="btnM2">Метод 2</button>
+</div>
+<div class="row">
+<button class="btn" id="btnReset">Сброс</button>
+</div>
+<div class="stats" id="stats"></div>
+</div>
+
+<div class="viewer">
+<div class="view">
+<canvas id="canvasOrig"></canvas>
+<label>Исходное изображение</label>
+</div>
+<div class="view">
+<canvas id="canvasRes"></canvas>
+<label>Результат пороговой обработки</label>
+</div>
+</div>
+</div>
+<script>
+const fileInput = document.getElementById('fileInput');
+const canvasOrig = document.getElementById('canvasOrig');
+const canvasRes = document.getElementById('canvasRes');
+const ctxOrig = canvasOrig.getContext('2d');
+const ctxRes = canvasRes.getContext('2d');
+let imgDataOrig = null;
+let currentImg = null;
+function loadImageFromFile(file) {
+const url = URL.createObjectURL(file);
+const img = new Image();
+img.onload = () => { currentImg = img; drawOrig(img); URL.revokeObjectURL(url); };
+img.src = url;
+}
+
+function loadSample(kind) {
+const c = document.createElement('canvas');
+c.width = 400; c.height = 300;
+const cx = c.getContext('2d');
+if (kind === 1) {
+cx.fillStyle = '#f0f0f0'; cx.fillRect(0, 0, 400, 300);
+for (let y = 0; y < 300; y++) {
+for (let x = 0; x < 400; x++) {
+const v = Math.floor((x / 400) * 255);
+cx.fillStyle = `rgb(${v},${v},${v})`;
+cx.fillRect(x, y, 1, 1);
+}
+}
+for (let i = 0; i < 3000; i++) {
+cx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
+cx.fillRect(Math.random() * 400, Math.random() * 300, 2, 2);
+}
+} else if (kind === 2) {
+cx.fillStyle = '#e0e0e0'; cx.fillRect(0, 0, 400, 300);
+cx.fillStyle = '#d0d0d0'; cx.fillRect(50, 50, 300, 200);
+cx.fillStyle = '#c0c0c0'; cx.fillRect(70, 70, 260, 160);
+} else if (kind === 3) {
+cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, 400, 300);
+cx.fillStyle = '#000000';
+cx.font = 'bold 40px sans-serif';
+cx.fillText('ABC', 80, 150);
+cx.fillText('123', 100, 220);
+for (let i = 0; i < 4000; i++) {
+cx.fillStyle = 'rgba(0,0,0,0.15)';
+cx.fillRect(Math.random() * 400, Math.random() * 300, 1.5, 1.5);
+}
+} else if (kind === 4) {
+cx.fillStyle = '#f8f8f8'; cx.fillRect(0, 0, 400, 300);
+for (let i = 0; i < 8; i++) {
+const g = cx.createRadialGradient(Math.random()*400, Math.random()*300, 10, Math.random()*400, Math.random()*300, 80);
+g.addColorStop(0, 'rgba(200,200,220,0.5)');
+g.addColorStop(1, 'rgba(248,248,248,0)');
+cx.fillStyle = g; cx.fillRect(0, 0, 400, 300);
+}
+cx.fillStyle = '#888'; cx.fillRect(100, 100, 200, 100);
+}
+currentImg = c;
+drawOrig(c);
+}
+
+function drawOrig(img) {
+canvasOrig.width = img.width;
+canvasOrig.height = img.height;
+ctxOrig.drawImage(img, 0, 0);
+imgDataOrig = ctxOrig.getImageData(0, 0, img.width, img.height);
+canvasRes.width = img.width;
+canvasRes.height = img.height;
+ctxRes.clearRect(0, 0, canvasRes.width, canvasRes.height);
+document.getElementById('stats').textContent = '';
+}
+function getPixel(data, w, h, x, y) {
+x = Math.max(0, Math.min(w - 1, x));
+y = Math.max(0, Math.min(h - 1, y));
+const i = (y * w + x) * 4;
+return (data[i] + data[i + 1] + data[i + 2]) / 3;
+}
+
+function setPixel(data, w, h, x, y, v) {
+x = Math.max(0, Math.min(w - 1, x));
+y = Math.max(0, Math.min(h - 1, y));
+const i = (y * w + x) * 4;
+data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+}
+
+function localMeanThreshold(data, w, h, radius, C) {
+const out = new Uint8ClampedArray(data.length);
+for (let y = 0; y < h; y++) {
+for (let x = 0; x < w; x++) {
+let sum = 0, cnt = 0;
+for (let dy = -radius; dy <= radius; dy++) {
+for (let dx = -radius; dx <= radius; dx++) {
+sum += getPixel(data, w, h, x + dx, y + dy);
+cnt++;
+}
+}
+const mean = sum / cnt;
+const val = getPixel(data, w, h, x, y);
+setPixel(out, w, h, x, y, val > mean - C ? 255 : 0);
+}
+}
+return out;
+}
+
+function localMeanStdThreshold(data, w, h, radius, k) {
+const out = new Uint8ClampedArray(data.length);
+for (let y = 0; y < h; y++) {
+for (let x = 0; x < w; x++) {
+const vals = [];
+for (let dy = -radius; dy <= radius; dy++) {
+for (let dx = -radius; dx <= radius; dx++) {
+vals.push(getPixel(data, w, h, x + dx, y + dy));
+}
+}
+const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+let varSum = 0;
+for (let i = 0; i < vals.length; i++) varSum += (vals[i] - mean) ** 2;
+const std = Math.sqrt(varSum / vals.length);
+const T = mean + k * std;
+const val = getPixel(data, w, h, x, y);
+setPixel(out, w, h, x, y, val > T ? 255 : 0);
+}
+}
+return out;
+}
+
+function apply(method) {
+if (!imgDataOrig) return;
+const radius = parseInt(document.getElementById('radius').value) || 15;
+const C = parseInt(document.getElementById('constC').value) || 10;
+const k = parseFloat(document.getElementById('coefK').value) || -1;
+const w = imgDataOrig.width, h = imgDataOrig.height;
+let out;
+const t0 = performance.now();
+if (method === 1) out = localMeanThreshold(imgDataOrig.data, w, h, radius, C);
+else out = localMeanStdThreshold(imgDataOrig.data, w, h, radius, k);
+const t1 = performance.now();
+const id = ctxRes.createImageData(w, h);
+id.data.set(out);
+ctxRes.putImageData(id, 0, 0);
+document.getElementById('stats').textContent = 'Размер окна: ' + (2*radius+1) + 'x' + (2*radius+1) + '\nВремя: ' + (t1-t0).toFixed(1) + ' мс\nМетод: ' + (method === 1 ? 'среднее - C' : 'среднее + k*std');
+}
+document.getElementById('fileInput').addEventListener('change', (e) => {
+if (e.target.files[0]) loadImageFromFile(e.target.files[0]);
+});
+document.getElementById('sample1').addEventListener('click', () => loadSample(1));
+document.getElementById('sample2').addEventListener('click', () => loadSample(2));
+document.getElementById('sample3').addEventListener('click', () => loadSample(3));
+document.getElementById('sample4').addEventListener('click', () => loadSample(4));
+document.getElementById('btnM1').addEventListener('click', () => apply(1));
+document.getElementById('btnM2').addEventListener('click', () => apply(2));
+document.getElementById('btnReset').addEventListener('click', () => {
+if (currentImg) { drawOrig(currentImg); ctxRes.clearRect(0, 0, canvasRes.width, canvasRes.height); document.getElementById('stats').textContent = ''; }
+});
+
+loadSample(1);
+</script>
+</body>
+</html>
