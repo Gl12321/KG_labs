@@ -31,7 +31,7 @@ h1 { text-align: center; margin-bottom: 24px; color: #1a1a1a; }
 .samples button:hover { background: #eff6ff; border-color: #3b82f6; }
 .note { font-size: 13px; color: #6b7280; line-height: 1.5; margin-top: 12px; }
 .compare { display: flex; gap: 10px; margin-top: 10px; }
-.stats { font-size: 13px; color: #166534; margin-top: 8px; font-family: monospace; }
+.stats { font-size: 13px; color: #166534; margin-top: 8px; font-family: monospace; white-space: pre-line; }
 </style>
 </head>
 <body>
@@ -102,41 +102,39 @@ const c = document.createElement('canvas');
 c.width = 400; c.height = 300;
 const cx = c.getContext('2d');
 if (kind === 1) {
-cx.fillStyle = '#f0f0f0'; cx.fillRect(0, 0, 400, 300);
-for (let y = 0; y < 300; y++) {
-for (let x = 0; x < 400; x++) {
-const v = Math.floor((x / 400) * 255);
-cx.fillStyle = `rgb(${v},${v},${v})`;
-cx.fillRect(x, y, 1, 1);
+const image = cx.createImageData(400, 300);
+let seed = 123456789;
+const nextNoise = () => { seed = (1664525 * seed + 1013904223) >>> 0; return (seed >>> 24) - 128; };
+for (let y = 0; y < 300; y++) for (let x = 0; x < 400; x++) {
+const i = (y * 400 + x) * 4;
+const v = Math.max(0, Math.min(255, Math.round(45 + 180 * x / 399 + nextNoise() * 0.55)));
+image.data[i] = image.data[i + 1] = image.data[i + 2] = v; image.data[i + 3] = 255;
 }
-}
-for (let i = 0; i < 3000; i++) {
-cx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-cx.fillRect(Math.random() * 400, Math.random() * 300, 2, 2);
-}
+cx.putImageData(image, 0, 0);
+cx.fillStyle = 'rgba(20,20,20,0.72)'; cx.fillRect(70, 80, 125, 115);
+cx.fillStyle = 'rgba(245,245,245,0.88)'; cx.font = 'bold 38px sans-serif'; cx.fillText('A 7', 88, 150);
 } else if (kind === 2) {
-cx.fillStyle = '#e0e0e0'; cx.fillRect(0, 0, 400, 300);
-cx.fillStyle = '#d0d0d0'; cx.fillRect(50, 50, 300, 200);
-cx.fillStyle = '#c0c0c0'; cx.fillRect(70, 70, 260, 160);
+cx.fillStyle = '#d8d8d8'; cx.fillRect(0, 0, 400, 300);
+cx.fillStyle = '#c7c7c7'; cx.fillRect(45, 42, 310, 216);
+cx.strokeStyle = '#b7b7b7'; cx.lineWidth = 5; cx.strokeRect(75, 75, 250, 150);
+cx.fillStyle = '#bcbcbc'; cx.font = 'bold 58px sans-serif'; cx.fillText('LOW', 105, 160);
+cx.fillStyle = '#e6e6e6'; cx.fillRect(120, 185, 160, 18);
 } else if (kind === 3) {
-cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, 400, 300);
-cx.fillStyle = '#000000';
-cx.font = 'bold 40px sans-serif';
-cx.fillText('ABC', 80, 150);
-cx.fillText('123', 100, 220);
-for (let i = 0; i < 4000; i++) {
-cx.fillStyle = 'rgba(0,0,0,0.15)';
-cx.fillRect(Math.random() * 400, Math.random() * 300, 1.5, 1.5);
-}
+cx.fillStyle = '#eeeeee'; cx.fillRect(0, 0, 400, 300);
+cx.filter = 'blur(2.2px)'; cx.fillStyle = '#3d3d3d'; cx.font = 'bold 54px sans-serif';
+cx.fillText('ТЕКСТ', 78, 138); cx.fillText('12345', 95, 214); cx.filter = 'none';
+cx.fillStyle = 'rgba(90,90,90,0.18)'; cx.fillRect(55, 70, 285, 170);
 } else if (kind === 4) {
-cx.fillStyle = '#f8f8f8'; cx.fillRect(0, 0, 400, 300);
-for (let i = 0; i < 8; i++) {
-const g = cx.createRadialGradient(Math.random()*400, Math.random()*300, 10, Math.random()*400, Math.random()*300, 80);
-g.addColorStop(0, 'rgba(200,200,220,0.5)');
-g.addColorStop(1, 'rgba(248,248,248,0)');
-cx.fillStyle = g; cx.fillRect(0, 0, 400, 300);
-}
-cx.fillStyle = '#888'; cx.fillRect(100, 100, 200, 100);
+const background = cx.createLinearGradient(0, 0, 400, 300);
+background.addColorStop(0, '#f7f7f7'); background.addColorStop(1, '#cfcfcf');
+cx.fillStyle = background; cx.fillRect(0, 0, 400, 300);
+[[90, 80, 75], [290, 85, 70], [115, 225, 60], [295, 215, 85]].forEach(([x, y, r]) => {
+const g = cx.createRadialGradient(x, y, 5, x, y, r);
+g.addColorStop(0, 'rgba(105,105,105,0.42)'); g.addColorStop(1, 'rgba(235,235,235,0)');
+cx.fillStyle = g; cx.fillRect(x - r, y - r, r * 2, r * 2);
+});
+cx.fillStyle = '#777'; cx.fillRect(106, 108, 188, 82);
+cx.fillStyle = '#d8d8d8'; cx.font = 'bold 28px sans-serif'; cx.fillText('OBJECT', 135, 157);
 }
 currentImg = c;
 drawOrig(c);
@@ -152,66 +150,52 @@ canvasRes.height = img.height;
 ctxRes.clearRect(0, 0, canvasRes.width, canvasRes.height);
 document.getElementById('stats').textContent = '';
 }
-function getPixel(data, w, h, x, y) {
-x = Math.max(0, Math.min(w - 1, x));
-y = Math.max(0, Math.min(h - 1, y));
-const i = (y * w + x) * 4;
-return (data[i] + data[i + 1] + data[i + 2]) / 3;
+function buildIntegrals(data, w, h, radius) {
+const ew = w + radius * 2, eh = h + radius * 2, stride = ew + 1;
+const sum = new Float64Array(stride * (eh + 1));
+const sumSq = new Float64Array(stride * (eh + 1));
+for (let y = 1; y <= eh; y++) for (let x = 1; x <= ew; x++) {
+const sx = Math.max(0, Math.min(w - 1, x - radius - 1));
+const sy = Math.max(0, Math.min(h - 1, y - radius - 1));
+const i = (sy * w + sx) * 4;
+const v = (data[i] + data[i + 1] + data[i + 2]) / 3;
+const p = y * stride + x;
+sum[p] = v + sum[p - 1] + sum[p - stride] - sum[p - stride - 1];
+sumSq[p] = v * v + sumSq[p - 1] + sumSq[p - stride] - sumSq[p - stride - 1];
+}
+return { sum, sumSq, stride };
 }
 
-function setPixel(data, w, h, x, y, v) {
-x = Math.max(0, Math.min(w - 1, x));
-y = Math.max(0, Math.min(h - 1, y));
-const i = (y * w + x) * 4;
-data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+function rectSum(integral, stride, x0, y0, x1, y1) {
+const a = y0 * stride + x0, b = y0 * stride + x1 + 1;
+const c = (y1 + 1) * stride + x0, d = (y1 + 1) * stride + x1 + 1;
+return integral[d] - integral[b] - integral[c] + integral[a];
 }
 
-function localMeanThreshold(data, w, h, radius, C) {
+function threshold(data, w, h, radius, offset, useStd) {
 const out = new Uint8ClampedArray(data.length);
-for (let y = 0; y < h; y++) {
-for (let x = 0; x < w; x++) {
-let sum = 0, cnt = 0;
-for (let dy = -radius; dy <= radius; dy++) {
-for (let dx = -radius; dx <= radius; dx++) {
-sum += getPixel(data, w, h, x + dx, y + dy);
-cnt++;
-}
-}
-const mean = sum / cnt;
-const val = getPixel(data, w, h, x, y);
-setPixel(out, w, h, x, y, val > mean - C ? 255 : 0);
-}
+const { sum, sumSq, stride } = buildIntegrals(data, w, h, radius);
+const side = radius * 2 + 1, count = side * side;
+for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+const mean = rectSum(sum, stride, x, y, x + side - 1, y + side - 1) / count;
+const variance = useStd ? Math.max(0, rectSum(sumSq, stride, x, y, x + side - 1, y + side - 1) / count - mean * mean) : 0;
+const i = (y * w + x) * 4, value = (data[i] + data[i + 1] + data[i + 2]) / 3;
+const limit = useStd ? mean + offset * Math.sqrt(variance) : mean - offset;
+const result = value > limit ? 255 : 0;
+out[i] = out[i + 1] = out[i + 2] = result; out[i + 3] = 255;
 }
 return out;
 }
 
-function localMeanStdThreshold(data, w, h, radius, k) {
-const out = new Uint8ClampedArray(data.length);
-for (let y = 0; y < h; y++) {
-for (let x = 0; x < w; x++) {
-const vals = [];
-for (let dy = -radius; dy <= radius; dy++) {
-for (let dx = -radius; dx <= radius; dx++) {
-vals.push(getPixel(data, w, h, x + dx, y + dy));
-}
-}
-const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-let varSum = 0;
-for (let i = 0; i < vals.length; i++) varSum += (vals[i] - mean) ** 2;
-const std = Math.sqrt(varSum / vals.length);
-const T = mean + k * std;
-const val = getPixel(data, w, h, x, y);
-setPixel(out, w, h, x, y, val > T ? 255 : 0);
-}
-}
-return out;
-}
+function localMeanThreshold(data, w, h, radius, C) { return threshold(data, w, h, radius, C, false); }
+function localMeanStdThreshold(data, w, h, radius, k) { return threshold(data, w, h, radius, k, true); }
 
 function apply(method) {
 if (!imgDataOrig) return;
-const radius = parseInt(document.getElementById('radius').value) || 15;
-const C = parseInt(document.getElementById('constC').value) || 10;
-const k = parseFloat(document.getElementById('coefK').value) || -1;
+const readNumber = (id, fallback) => { const n = Number(document.getElementById(id).value); return Number.isFinite(n) ? n : fallback; };
+const radius = Math.max(1, Math.min(50, Math.round(readNumber('radius', 15))));
+const C = readNumber('constC', 10);
+const k = readNumber('coefK', -1);
 const w = imgDataOrig.width, h = imgDataOrig.height;
 let out;
 const t0 = performance.now();
